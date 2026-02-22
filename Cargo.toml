@@ -1,0 +1,30 @@
+[package]
+name = "mc_headless_auth"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+crossbeam = "0.8.4"
+bytes = "1.11.1"
+uuid = { version = "1.21.0", features = ["v4", "serde"] }
+sha1 = "0.10.6"
+rand = "0.10.0"
+rsa = "0.10.0-rc.15"
+der = "0.8.0"
+aes = "0.8.4"
+cfb8 = "0.8.1"
+reqwest = { version = "0.13.2", features = ["blocking", "json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+simdnbt = "0.9.0"
+chrono = "0.4.43"
+image = "0.25.9"
+base64 = "0.22.1"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "mcha_server"
+path = "src/main.rs"
