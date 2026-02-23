@@ -1,15 +1,16 @@
+use simdnbt::owned::*;
 use std::fmt::Debug;
 
+/// Creates a text component message with a token as input  
 pub trait MessageGenerator: Debug + Clone {
-    fn create_message(self, token: &str) -> simdnbt::owned::NbtTag;
+    fn create_message(self, token: &str) -> NbtTag;
 }
 
+/// The default message template displayed upon disconnect  
 #[derive(Debug, Clone)]
 pub struct Message;
 impl MessageGenerator for Message {
-    fn create_message(self, token: &str) -> simdnbt::owned::NbtTag {
-        use simdnbt::owned::*;
-
+    fn create_message(self, token: &str) -> NbtTag {
         let mut text = NbtCompound::new();
         text.insert("text", NbtTag::String("Token: ".into()));
 

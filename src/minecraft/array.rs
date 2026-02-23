@@ -1,8 +1,11 @@
 use bytes::Buf;
 
-use crate::minecraft::{
-    packet::{ReadPacketData, WritePacketData},
-    var_int::VarInt,
+use crate::{
+    error::TypeError,
+    minecraft::{
+        packet::{ReadPacketData, WritePacketData},
+        var_int::VarInt,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -22,10 +25,6 @@ impl<T: WritePacketData> Array<T> {
     pub fn as_ref(&self) -> &Vec<T> {
         &self.data
     }
-
-    pub fn to_vec(self) -> Vec<T> {
-        self.data
-    }
 }
 
 impl<T: WritePacketData> WritePacketData for Array<T> {
@@ -38,11 +37,11 @@ impl<T: WritePacketData> WritePacketData for Array<T> {
 }
 
 impl ReadPacketData for Array<u8> {
-    fn read(data: &mut bytes::Bytes) -> Self {
-        let len = VarInt::read(data);
+    fn read(data: &mut bytes::Bytes) -> Result<Self, TypeError> {
+        let len = VarInt::read(data)?;
 
         let v_data = data.copy_to_bytes(len.0 as usize).to_vec();
 
-        Array { len, data: v_data }
+        Ok(Array { len, data: v_data })
     }
 }

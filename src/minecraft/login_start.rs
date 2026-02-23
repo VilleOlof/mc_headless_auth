@@ -1,7 +1,10 @@
 use bytes::Buf;
 use uuid::Uuid;
 
-use crate::minecraft::{packet::ReadPacketData, string::PacketString};
+use crate::{
+    error::TypeError,
+    minecraft::{packet::ReadPacketData, string::PacketString},
+};
 
 #[derive(Debug, Clone)]
 pub struct LoginStart {
@@ -10,14 +13,14 @@ pub struct LoginStart {
 }
 
 impl ReadPacketData for LoginStart {
-    fn read(data: &mut bytes::Bytes) -> Self {
-        let name = PacketString::read(data);
+    fn read(data: &mut bytes::Bytes) -> Result<Self, TypeError> {
+        let name = PacketString::read(data)?;
         let uuid = if data.len() > 0 {
             Some(Uuid::from_u128(data.get_u128()))
         } else {
             None
         };
 
-        return Self { name, uuid };
+        Ok(Self { name, uuid })
     }
 }

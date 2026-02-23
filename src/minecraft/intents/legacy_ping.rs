@@ -1,62 +1,107 @@
-use std::{io::Write, net::TcpStream};
+use crate::minecraft::packet::InitPacket;
 
-use bytes::{BufMut, BytesMut};
-
-const DESC_WARNING: &'static str = "Use a client newer than 1.7+";
-
-pub fn match_id_to_version(id: i32, stream: &mut TcpStream) {
-    match id {
-        -127 => _1dot6::advance(stream),             // FE 01 FA
-        -126 => _1dot4_to_1dot5::advance(stream),    // FE 01
-        -125 => beta1dot8_to_1dot3::advance(stream), // FE
-        _ => panic!("unknown custom packet id for legacy pings"),
+pub fn compare_init_bytes(bytes: [u8; 3]) -> Option<InitPacket> {
+    match bytes {
+        [254, 0, 0] => Some(InitPacket::Vbeta1_8To1_3),
+        [254, 1, 0] => Some(InitPacket::V1_4To1_5),
+        [254, 1, 250] => Some(InitPacket::V1_6),
+        _ => None,
     }
 }
 
-pub fn advance(stream: &mut TcpStream) {
-    let mut data = BytesMut::new();
+pub mod _1dot6 {
+    use std::{io::Write, net::TcpStream};
 
-    let str: Vec<u16> = format!("§1\0127\01.4.2\0{DESC_WARNING}\00\00",)
-        .encode_utf16()
-        .collect();
-    // let str: Vec<u16> = format!(
-    //     "§1\0127\01.4.2\0{}\00\00",
-    //     config.legacy_decription.unwrap_or_default()
-    // )
-    // .encode_utf16()
-    // .collect();
+    use bytes::{BufMut, BytesMut};
+    use constcat::concat;
 
-    data.put_u8(0xFF);
-    data.put_u16(str.len() as u16);
-    for unit in str {
-        data.put_u16(unit);
+    use crate::{
+        config::{MIN_SUPPORTED_VERSION, StatusConfig},
+        error::TypeError,
+    };
+
+    /// https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#1.6
+    pub fn advance(stream: &mut TcpStream, config: StatusConfig) -> Result<(), TypeError> {
+        let mut data = BytesMut::new();
+
+        data.put_u8(0xFF);
+
+        let str = format!(
+            "§1\0{}\0{}\0{}\0{}\0{}",
+            "127",
+            concat!(MIN_SUPPORTED_VERSION, "+"),
+            config.legacy_decription.unwrap_or_default(),
+            "0",
+            "0"
+        );
+
+        data.extend_from_slice(&(str.len() as u16 - 1).to_be_bytes()[..]);
+
+        // https://github.com/Duckulus/mc-honeypot/blob/1514807e8af7f7cbfd13111fec334b9f4883b605/src/server/legacy.rs
+        let utf16_be: Vec<u16> = str
+            .encode_utf16()
+            .collect::<Vec<u16>>()
+            .iter()
+            .map(|n| u16::from_be_bytes([(n & 0xFF) as u8, (n >> 8) as u8]))
+            .collect();
+
+        unsafe {
+            data.extend_from_slice(utf16_be.align_to::<u8>().1);
+        }
+
+        stream
+            .write_all(&data)
+            .map_err(|e| TypeError::WriteError(e))?;
+
+        Ok(())
     }
-
-    println!("{:?}", data);
-
-    stream.write_all(&data).unwrap();
 }
 
-mod _1dot6 {
+pub mod _1dot4_to_1dot5 {
     use std::net::TcpStream;
 
-    pub fn advance(stream: &mut TcpStream) {
-        todo!()
+    use crate::{config::StatusConfig, error::TypeError, minecraft::intents::legacy_ping::_1dot6};
+
+    pub fn advance(stream: &mut TcpStream, config: StatusConfig) -> Result<(), TypeError> {
+        _1dot6::advance(stream, config)
     }
 }
 
-mod _1dot4_to_1dot5 {
-    use std::net::TcpStream;
+pub mod beta1dot8_to_1dot3 {
+    use std::{io::Write, net::TcpStream};
 
-    pub fn advance(stream: &mut TcpStream) {
-        todo!()
-    }
-}
+    use bytes::{BufMut, BytesMut};
 
-mod beta1dot8_to_1dot3 {
-    use std::net::TcpStream;
+    use crate::{config::StatusConfig, error::TypeError};
 
-    pub fn advance(stream: &mut TcpStream) {
-        todo!()
+    const MAX_PACKET_SIZE: u16 = 256;
+
+    /// https://minecraft.wiki/w/Java_Edition_protocol/Server_List_Ping#Beta_1.8_to_1.3
+    pub fn advance(stream: &mut TcpStream, config: StatusConfig) -> Result<(), TypeError> {
+        let mut data = BytesMut::new();
+        data.put_u8(0x0FF); // packet id
+
+        let str = format!("{}§0§0", config.legacy_decription.unwrap_or_default());
+        let str = str.encode_utf16();
+
+        let packet_len = str.clone().count() as u16;
+        if packet_len > MAX_PACKET_SIZE {
+            return Err(TypeError::BetaLegacyPacketIsTooBig(
+                MAX_PACKET_SIZE,
+                packet_len,
+            ));
+        }
+
+        data.put_u16(packet_len);
+
+        for unit in str.collect::<Vec<u16>>() {
+            data.extend_from_slice(&unit.to_be_bytes()[..]);
+        }
+
+        stream
+            .write_all(&data)
+            .map_err(|e| TypeError::WriteError(e))?;
+
+        Ok(())
     }
 }

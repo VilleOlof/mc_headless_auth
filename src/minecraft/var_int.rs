@@ -2,9 +2,12 @@ use std::{io::Read, net::TcpStream};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::minecraft::{
-    encrypt::{Aes128CfbDec, decrypt_packet},
-    packet::{ReadPacketData, WritePacketData},
+use crate::{
+    error::TypeError,
+    minecraft::{
+        encrypt::{Aes128CfbDec, decrypt_packet},
+        packet::{ReadPacketData, WritePacketData},
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -13,53 +16,70 @@ impl VarInt {
     const SEGMENT_BITS: u8 = 0x7F;
     const CONTINUE_BIT: u8 = 0x80;
 
-    // TODO make VarInt via different context's more generic
-    pub fn read_via_stream(stream: &mut TcpStream) -> Self {
+    // TODO: make this all more generic ass
+    pub fn read_via_stream(
+        stream: &mut TcpStream,
+        pre_bytes: &mut Vec<u8>,
+    ) -> Result<Self, TypeError> {
         let mut value: i32 = 0;
         let mut position: i32 = 0;
 
         while position < 32 {
-            let mut buf = [0u8; 1];
-            stream.read_exact(&mut buf).unwrap();
-            let byte = buf[0];
+            // pre-bytes are some bytes from the packet we have already read
+            // incase they were a legacy packet but if normal packet we just use those bytes
+            // towards the varint len instead
+            let byte = if !pre_bytes.is_empty() {
+                pre_bytes.remove(0)
+            } else {
+                let mut buf = [0u8; 1];
+                stream
+                    .read_exact(&mut buf)
+                    .map_err(|e| TypeError::ReadError(e))?;
+                buf[0]
+            };
 
             value |= ((byte & Self::SEGMENT_BITS) as i32) << position;
 
             if (byte & Self::CONTINUE_BIT) == 0 {
-                return VarInt(value);
+                return Ok(VarInt(value));
             }
 
             position += 7;
         }
 
-        panic!("overzied varint")
+        Err(TypeError::OversizedVarInt(value))
     }
 
-    pub fn read_via_encrypted_stream(stream: &mut TcpStream, dec: &mut Aes128CfbDec) -> Self {
+    pub fn read_via_encrypted_stream(
+        stream: &mut TcpStream,
+        dec: &mut Aes128CfbDec,
+    ) -> Result<Self, TypeError> {
         let mut value: i32 = 0;
         let mut position: i32 = 0;
 
         while position < 32 {
             let mut buf = [0u8; 1];
-            stream.read_exact(&mut buf).unwrap();
-            decrypt_packet(dec, &mut buf);
+            stream
+                .read_exact(&mut buf)
+                .map_err(|e| TypeError::ReadError(e))?;
+            decrypt_packet(dec, &mut buf)?;
             let byte = buf[0];
 
             value |= ((byte & Self::SEGMENT_BITS) as i32) << position;
 
             if (byte & Self::CONTINUE_BIT) == 0 {
-                return VarInt(value);
+                return Ok(VarInt(value));
             }
 
             position += 7;
         }
 
-        panic!("overzied varint")
+        Err(TypeError::OversizedVarInt(value))
     }
 }
 
 impl ReadPacketData for VarInt {
-    fn read(data: &mut Bytes) -> Self {
+    fn read(data: &mut Bytes) -> Result<Self, TypeError> {
         let mut value: i32 = 0;
         let mut position: i32 = 0;
 
@@ -68,18 +88,23 @@ impl ReadPacketData for VarInt {
             value |= ((byte & Self::SEGMENT_BITS) as i32) << position;
 
             if (byte & Self::CONTINUE_BIT) == 0 {
-                return VarInt(value);
+                return Ok(VarInt(value));
             }
 
             position += 7;
         }
 
-        panic!("overized varint");
+        Err(TypeError::OversizedVarInt(value))
     }
 }
 
 impl WritePacketData for VarInt {
     fn write(mut self, data: &mut BytesMut) {
+        if self.0 == 0 {
+            data.put_u8(0);
+            return;
+        }
+
         while (self.0 & !Self::SEGMENT_BITS as i32) != 0 {
             data.put_u8((self.0 & Self::SEGMENT_BITS as i32 | Self::CONTINUE_BIT as i32) as u8);
             self.0 >>= 7;

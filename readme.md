@@ -1,54 +1,10 @@
-<div style="display:flex; align-items: center; gap: 1rem;">
-    <img src="icon.png">
-    <h1>MC-HA</h1>
-</div>
+![icon.png](https://bimply.lifelike.dev/d/ZyRdaH55Au)
 
----
+# MC-HA
 
-> Minecraft Headless Authenticator for 1.7+
+> Minecraft Headless Authenticator for 1.21.2+
 
-a simple way to authenticate a minecraft account via joining a server & retrieving a token.  
-
-## Steps
-
-- Minecraft account joins the server
-- The server logs their uuid and generates a token for that account & kicks the player with that token as a response
-- Then that token can be used to link that uuid to whatever account logic or further processing
-
-
-
-## Lib
-
-Should both be a binary and a library, the binary should just start the server and print the uuid & token together in stdout.  
-
-The library should expose functions like:
-
-starting the server should spawn a new thread and run the server  
-and returns a server struct that internally holds communication to the server
-and can verify arbritaty tokens and see of they fit an account
-```rust
-let server = start_server().await;
-```
-
-```rust
-// important that the server is clonable and have an internal Arc for the channel communication etc.
-// so the user can just clone it and hold the same connection to the started server for ease of use
-#[derive(Clone)]
-struct Server {
-    on_join: Channel,
-    verify: Channel
-}
-
-impl Server {
-    pub fn verify(token: impl AsRef<str>) -> Result<User> {}
-}
-
-struct User {
-    uuid: Uuid,
-    username: String,
-    ...
-}
-```
+A simple way to authenticate a minecraft account via joining a server & syncing a token.  
 
 ## Usage
 
@@ -60,6 +16,58 @@ fn main() {
 
     let token = String::from("...");
     let result = server.verify(&token.trim().to_uppercase());
-    assert!(result.is_ok());
+    assert!(result.is_some());
 }
 ```
+
+## Versions
+
+Due to network protocol changes, currently the library only supports `1.21.2+` *(`768`)*.  
+This has been tested to work in `1.21.2`, `1.21.3`, `1.21.4`, `1.21.5`, `1.21.6`, `1.21.8`, `1.21.9`, `1.21.10` & `1.21.11`.  
+Technically the networking protocol and authentication system should allow for any client with a version of `1.7+` to work.  
+But I've encountered plenty of small differences in networking between that and now that isn't really documented anywhere.  
+
+### Non-working versions
+
+Versions that I've tested to **not** work and their vague reasoning on why.  
+
+- **1.21.1**, **1.21** `Failed to decode clientbound/minecraft:game_profile`  
+- **1.20**, **1.19.2**, **1.19**, **1.16.1**, **1.12.2**, **1.8** `Found 1 bytes extra whilst reading packet 1`
+- **1.15** `<No Error>`
+- **1.7.2** `Key was smaller than nothing! Weird key!`
+
+Note that these are from the latest version of this library as of writing this.  
+In the past I have gotten different errors than what is written here.  
+Like `1.16.1` have complained about extra bytes in a different sequence.  
+And `1.12.2` and `1.8` have responded with `IndexOutOfBounds` errors in the past.
+
+
+## Server List Pings
+
+The server implements legacy pings for all previous versions, including:  
+- `Beta 1.8` to `1.3`  
+- `1.4` to `1.5`
+- `1.6`
+
+And of course the modern server ping sequence.  
+
+## Configuration
+
+Everything that the client visually sees can be customized and how the token generates can also be overriden.  
+
+### Server Configuration
+
+A `Token` and `Message` generator can be supplied when starting a minecraft server.  
+The `Token` generator takes in the players `username` and `uuid` and must return a string that the client receives.  
+This token is then synced with the player to verify it later on.  
+The `Message` generator takes in the token and must return a valid [text component](https://minecraft.wiki/w/Text_component_format) that is displayed to the user upon a successful disconnection.  
+
+For more look at the `ServerConfig`.  
+
+
+### Status Configuration
+
+The `favicon` for server list ping can changed to any `64x64` `png` image.  
+The `description` displayed in the server list can be any valid `Nbt` [text component](https://minecraft.wiki/w/Text_component_format).  
+You can also supply a `legacy_decription` which is just a simple string that is used in legacy ping packets,  
+and also if a client is too old to join.  

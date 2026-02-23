@@ -1,13 +1,14 @@
 use rand::{RngExt, rng};
 
-use crate::user::User;
+use crate::{ServerError, user::User};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum MessageData {
     OnJoin { user: User, token: String },
+    ConnectionError(Box<ServerError>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ChannelMessage {
     pub _id: i64,
     pub data: MessageData,

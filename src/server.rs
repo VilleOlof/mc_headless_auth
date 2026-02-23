@@ -1,18 +1,18 @@
 use std::thread;
 
-use crossbeam::channel::{Receiver, bounded};
-
 use crate::{
-    channel_message::{ChannelMessage, MessageData},
-    config::ServerConfig,
-    error::MCHAError,
-    minecraft,
-    token::storage::TokenStorage,
-    user::User,
+    ServerError, broadcast::Broadcast, channel_message::MessageData, config::ServerConfig,
+    minecraft, token::storage::TokenStorage, user::User,
 };
 
+/// The consumer end of the Minecraft server  
+///
+/// Holds an internal connection to the thread running the Minecraft server.  
+///
+/// Use this to start it and get events from it.  
+#[derive(Clone)]
 pub struct Server {
-    pub(crate) r: Receiver<ChannelMessage>,
+    pub(crate) broadcast: Broadcast,
     pub(crate) storage: TokenStorage,
 }
 
@@ -21,39 +21,54 @@ impl Server {
 
     pub fn start(config: ServerConfig) -> Self {
         let storage = TokenStorage::new(config.token_ttl);
+        let broadcast = Broadcast::new();
 
-        let (s, r) = bounded::<ChannelMessage>(Self::CHANNEL_CAPACITY);
-
-        let s1 = s.clone();
+        let _broadcast = broadcast.clone();
         thread::spawn(move || {
-            minecraft::server::start(config, s1);
+            minecraft::server::start(config, _broadcast);
         });
 
-        let server = Self { r, storage };
+        let server = Self { broadcast, storage };
 
-        server.listen_for_joins();
+        let _storage = server.storage.clone();
+        server.on_join(move |user, token| {
+            _storage.insert(token.clone(), user.clone());
+        });
 
         server
     }
 
-    fn listen_for_joins(&self) {
-        let r = self.r.clone();
-        let storage = self.storage.clone();
+    pub fn verify(&self, token: impl AsRef<str>) -> Option<User> {
+        self.storage.get(&token.as_ref().into())
+    }
+
+    pub fn on_error(&self, handler: impl Fn(&ServerError) + Send + Sync + 'static) {
+        let b = self.broadcast.clone();
         thread::spawn(move || {
+            let r = b.sub(Self::CHANNEL_CAPACITY);
             while let Ok(msg) = r.recv() {
-                match msg.data {
-                    MessageData::OnJoin { user, token } => {
-                        storage.insert(token, user);
+                match &msg.data {
+                    MessageData::ConnectionError(e) => {
+                        handler(e.as_ref());
                     }
+                    _ => (),
                 }
             }
         });
     }
 
-    pub fn verify(&self, token: impl AsRef<str>) -> Result<User, MCHAError> {
-        match self.storage.get(&token.as_ref().into()) {
-            Some(data) => Ok(data),
-            None => Err(MCHAError::NoMatchingToken(token.as_ref().to_string())),
-        }
+    pub fn on_join(&self, handler: impl Fn(&User, &String) + Send + Sync + 'static) {
+        let b = self.broadcast.clone();
+        thread::spawn(move || {
+            let r = b.sub(Self::CHANNEL_CAPACITY);
+            while let Ok(msg) = r.recv() {
+                match &msg.data {
+                    MessageData::OnJoin { user, token } => {
+                        handler(user, token);
+                    }
+                    _ => (),
+                }
+            }
+        });
     }
 }

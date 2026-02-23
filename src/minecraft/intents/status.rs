@@ -1,65 +1,44 @@
-use std::{
-    io::{BufWriter, Cursor},
-    net::TcpStream,
-};
+use std::{io::Cursor, net::TcpStream};
 
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::Buf;
+use constcat::concat;
 use image::{ImageFormat, RgbaImage};
 use serde::Serialize;
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::{
-    config::StatusConfig,
+    ServerError,
+    config::{MIN_SUPPORTED_VERSION, StatusConfig},
     message::MessageGenerator,
     minecraft::{
-        handshake::Handshake,
-        packet::{self, Packet, WritePacketData},
-        server::ConnectionState,
-        string::PacketString,
+        handshake::Handshake, packet::Packet, packets, protocol_version, server::ConnectionState,
     },
     token::TokenGenerator,
 };
 
 pub fn advance<T: TokenGenerator, M: MessageGenerator>(
     stream: &mut TcpStream,
-    state: ConnectionState<T, M>,
+    _state: ConnectionState<T, M>,
     handshake: Handshake,
     config: StatusConfig,
-) {
-    // 3. Status Request
-    let status_request = Packet::from_stream(stream);
-    if status_request.id.0 != 0x00 {
-        panic!("mismatched status_request packet id");
-    }
+) -> Result<(), ServerError> {
+    let _ = Packet::from_stream(stream, 0x00)?;
 
-    // 4. Status Response
-    let status = get_status(handshake.protocol_version.0, config);
-    println!("{status:?}");
-    let packet_string = PacketString::new(status);
-    let mut data = BytesMut::new();
-    packet_string.write(&mut data);
-    Packet::new(0x00, data.into()).write_stream(stream);
-    println!("sent status response");
+    let status = get_status(handshake.protocol_version.0, config)?;
+    packets::status_response(status).write_stream(stream)?;
 
-    // 5. Ping Request
-    let mut ping = Packet::from_stream(stream);
-    if ping.id.0 != 0x01 {
-        panic!("mismatched ping_request packet id");
-    }
+    let mut ping = Packet::from_stream(stream, 0x01)?;
     let timestamp = ping.data.get_i64();
-    println!("got ping request: {timestamp}");
 
-    // 6. Pong Response
-    let mut data = BytesMut::new();
-    data.put_i64(timestamp);
-    Packet::new(0x01, data.into()).write_stream(stream);
-    println!("sent pong response")
+    packets::pong_response(timestamp).write_stream(stream)?;
+
+    Ok(())
 }
 
-fn get_status(protocol: i32, config: StatusConfig) -> String {
+fn get_status(protocol: i32, config: StatusConfig) -> Result<String, ServerError> {
     let status = StatusResponse {
         version: Version {
-            name: "1.7+".to_string(),
+            name: concat!(MIN_SUPPORTED_VERSION, "+").to_string(),
             protocol,
         },
         players: Players {
@@ -67,29 +46,37 @@ fn get_status(protocol: i32, config: StatusConfig) -> String {
             online: 0,
             sample: Vec::default(),
         },
-        description: config.description,
-        favicon: encode_favicon(config.favicon),
+        description: if protocol < protocol_version::MIN_SUPPORTED_PROTOCOL {
+            Some(Value::String(config.legacy_decription.unwrap_or_default()))
+        } else {
+            config.description
+        },
+        favicon: encode_favicon(config.favicon)?,
         enforces_secure_chat: false,
     };
 
-    serde_json::to_string_pretty(&status).unwrap()
+    Ok(serde_json::to_string_pretty(&status)?)
 }
 
-fn encode_favicon(favicon: Option<RgbaImage>) -> Option<String> {
+fn encode_favicon(favicon: Option<RgbaImage>) -> Result<Option<String>, ServerError> {
     use base64::prelude::*;
 
     let favicon = match favicon {
         Some(f) => f,
-        None => return None,
+        None => return Ok(None),
     };
 
-    let mut img = Cursor::new(Vec::new());
-    favicon.write_to(&mut img, ImageFormat::Png).unwrap();
+    if favicon.width() > 64 || favicon.height() > 64 {
+        return Ok(None);
+    }
 
-    Some(format!(
+    let mut img = Cursor::new(Vec::new());
+    favicon.write_to(&mut img, ImageFormat::Png)?;
+
+    Ok(Some(format!(
         "data:image/png;base64,{}",
         BASE64_STANDARD.encode(img.get_ref())
-    ))
+    )))
 }
 
 #[derive(Debug, Clone, Serialize)]

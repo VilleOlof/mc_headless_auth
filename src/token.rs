@@ -4,6 +4,7 @@ use rand::RngExt;
 
 use crate::User;
 
+/// Generates a token based off a user, and optionally a different way to display it  
 pub trait TokenGenerator: Debug + Clone {
     fn generate(&self, user: &User) -> String;
     fn display(&self, token: &str) -> String {
@@ -11,6 +12,7 @@ pub trait TokenGenerator: Debug + Clone {
     }
 }
 
+/// Default token generator, a string of 10 random A-Z character
 #[derive(Debug, Clone)]
 pub struct Token;
 impl Token {
@@ -62,12 +64,12 @@ pub mod storage {
     use crate::User;
 
     #[derive(Debug, Clone)]
-    struct StorageCell {
+    pub(crate) struct StorageCell {
         pub time: DateTime<Utc>,
         pub data: User,
     }
 
-    type StorageInternal = Arc<Mutex<HashMap<String, StorageCell>>>;
+    pub(crate) type StorageInternal = Arc<Mutex<HashMap<String, StorageCell>>>;
 
     #[derive(Debug, Clone)]
     pub struct TokenStorage {
@@ -88,7 +90,7 @@ pub mod storage {
         }
 
         pub fn insert(&self, token: String, user: User) -> i64 {
-            let mut lock = self.tokens.lock().unwrap();
+            let mut lock = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
             let time = Utc::now();
 
             lock.insert(token, StorageCell { time, data: user });
@@ -99,7 +101,7 @@ pub mod storage {
         pub fn get(&self, token: &String) -> Option<User> {
             self.tokens
                 .lock()
-                .unwrap()
+                .unwrap_or_else(|e| e.into_inner())
                 .get(token)
                 .map(|s| s.data.clone())
         }
@@ -107,7 +109,7 @@ pub mod storage {
         fn start_storage_cleaner(tokens: StorageInternal, ttl: Duration) -> ! {
             loop {
                 {
-                    let mut lock = tokens.lock().unwrap();
+                    let mut lock = tokens.lock().unwrap_or_else(|e| e.into_inner());
 
                     let mut invalid_tokens = Vec::new();
                     for (token, data) in lock.iter() {
