@@ -2,11 +2,11 @@ use std::fmt::Debug;
 
 use rand::RngExt;
 
-use crate::User;
+use crate::Player;
 
 /// Generates a token based off a user, and optionally a different way to display it  
 pub trait TokenGenerator: Debug + Clone {
-    fn generate(&self, user: &User) -> String;
+    fn generate(&self, user: &Player) -> String;
     fn display(&self, token: &str) -> String {
         token.to_string()
     }
@@ -28,7 +28,7 @@ impl Token {
 }
 
 impl TokenGenerator for Token {
-    fn generate(&self, _: &User) -> String {
+    fn generate(&self, _: &Player) -> String {
         let mut rng = rand::rng();
 
         let token: String = (0..Self::LENGTH)
@@ -61,12 +61,12 @@ pub mod storage {
 
     use chrono::{DateTime, Utc};
 
-    use crate::User;
+    use crate::Player;
 
     #[derive(Debug, Clone)]
     pub(crate) struct StorageCell {
         pub time: DateTime<Utc>,
-        pub data: User,
+        pub data: Player,
     }
 
     pub(crate) type StorageInternal = Arc<Mutex<HashMap<String, StorageCell>>>;
@@ -89,7 +89,7 @@ pub mod storage {
             storage
         }
 
-        pub fn insert(&self, token: String, user: User) -> i64 {
+        pub fn insert(&self, token: String, user: Player) -> i64 {
             let mut lock = self.tokens.lock().unwrap_or_else(|e| e.into_inner());
             let time = Utc::now();
 
@@ -98,7 +98,7 @@ pub mod storage {
             time.timestamp()
         }
 
-        pub fn get(&self, token: &String) -> Option<User> {
+        pub fn get(&self, token: &String) -> Option<Player> {
             self.tokens
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())

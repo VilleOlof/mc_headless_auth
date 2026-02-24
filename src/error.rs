@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use crossbeam::channel::SendError;
 use rsa::pkcs8::spki;
 use simdnbt::owned::NbtTag;
@@ -10,6 +12,12 @@ use crate::{channel_message::ChannelMessage, minecraft::packet::Packet};
 pub enum MCHAError {
     #[error("No UUID from LoginStart(username:{0})")]
     NoUuid(String),
+    #[error("Failed to send channel message: {0:?}")]
+    SendError(#[from] SendError<ChannelMessage>),
+    #[error("Failed to join thread: {0:?}")]
+    ThreadError(Box<dyn Any + Send + 'static>),
+    #[error("Tried to shutdown server when no server is running")]
+    NoServerRunning,
     #[error("{0:?}")]
     ServerError(#[from] ServerError),
 }

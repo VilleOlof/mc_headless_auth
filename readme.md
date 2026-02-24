@@ -6,6 +6,9 @@
 
 A simple way to authenticate a minecraft account via joining a server & syncing a token.  
 
+This library offloads the authentication process to the launcher + client.  
+Only using a barebones Minecraft server to verify the authentication and retreive the player details.  
+
 ## Usage
 
 ```rust
@@ -15,10 +18,22 @@ fn main() {
     let server = Server::start(ServerConfig::default());
 
     let token = String::from("...");
-    let result = server.verify(&token.trim().to_uppercase());
-    assert!(result.is_some());
+    let player = server.verify(&token.trim().to_uppercase());
+    assert!(player.is_some());
 }
 ```
+
+A typical use of this would be to have a user already be logged into your service.  
+Then while logged in, you ask them to join the Minecraft server.  
+And respond back with the token given in Minecraft, on the site.  
+You then check if the token is real and retreive the Minecraft user.  
+With this information you have now linked your users account with their Minecraft account.  
+
+This process is way simpler than for example using [Microsoft OAuth2](https://minecraft.wiki/w/Microsoft_authentication#Microsoft_OAuth2_flow).  
+The only downside is requiring that the user opens a relatively modern Minecraft client and joins a server.  
+While using OAuth2 doesn't require your user to leave your application.  
+
+To see a web server + minecraft server where you check a token, check out the [examples](examples/web_server/).  
 
 ## Versions
 

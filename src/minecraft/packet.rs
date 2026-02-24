@@ -33,7 +33,7 @@ impl Packet {
         }
     }
 
-    pub fn init_reading(stream: &mut TcpStream) -> Result<InitPacket, TypeError> {
+    pub fn read_init(stream: &mut TcpStream) -> Result<InitPacket, TypeError> {
         // read 3 first bytes and see if they align with any pre 1.7 list pings
         // if not, we can pass the first 3 bytes and the stream to the varint processing
         let mut packet_ident = [0u8; 3];

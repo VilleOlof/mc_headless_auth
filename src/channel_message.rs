@@ -1,11 +1,12 @@
 use rand::{RngExt, rng};
 
-use crate::{ServerError, user::User};
+use crate::{ServerError, player::Player};
 
 #[derive(Debug)]
 pub enum MessageData {
-    OnJoin { user: User, token: String },
+    OnJoin { player: Player, token: String },
     ConnectionError(Box<ServerError>),
+    CloseServer,
 }
 
 #[derive(Debug)]

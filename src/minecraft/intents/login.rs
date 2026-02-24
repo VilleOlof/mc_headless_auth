@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use simdnbt::owned::{NbtList, NbtTag};
 
 use crate::{
-    ServerError, User,
+    Player, ServerError,
     channel_message::{ChannelMessage, MessageData},
     message::MessageGenerator,
     minecraft::{
@@ -34,16 +34,16 @@ pub fn advance<T: TokenGenerator, M: MessageGenerator>(
         handshake.protocol_version.0,
     )?;
 
-    let user = User {
+    let player = Player {
         username: auth_res.profile.name,
         uuid: auth_res.profile.id,
     };
-    let token = send_disconnect(stream, state.clone(), &user, &mut auth_res.enc)?;
+    let token = send_disconnect(stream, state.clone(), &player, &mut auth_res.enc)?;
 
     state
         .broadcast
         .send(ChannelMessage::new(MessageData::OnJoin {
-            user,
+            player,
             token: token.to_string(),
         }));
 
@@ -53,10 +53,10 @@ pub fn advance<T: TokenGenerator, M: MessageGenerator>(
 fn send_disconnect<T: TokenGenerator, M: MessageGenerator>(
     stream: &mut TcpStream,
     state: ConnectionState<T, M>,
-    user: &User,
+    player: &Player,
     enc: &mut Aes128CfbEnc,
 ) -> Result<String, ServerError> {
-    let gen_token = state.token.generate(&user);
+    let gen_token = state.token.generate(&player);
     let msg = state
         .message
         .create_message(&state.token.display(&gen_token));
@@ -65,8 +65,9 @@ fn send_disconnect<T: TokenGenerator, M: MessageGenerator>(
     // we must verify because the message can be customized from the consumer
     match msg {
         NbtTag::Compound(_) => (),
-        NbtTag::List(NbtList::Compound(_)) => (),
         NbtTag::String(_) => (),
+        NbtTag::List(NbtList::Compound(_)) => (),
+        NbtTag::List(NbtList::String(_)) => (),
         _ => return Err(ServerError::InvalidMessageNbtTag(msg)),
     }
 

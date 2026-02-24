@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MC-HA Example</title>
+</head>
+
+<style>
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        border: 0;
+    }
+
+    body {
+        background-color: #0e0f0f;
+        color: #cacaca;
+        width: 100dvw;
+        height: 100dvh;
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+    }
+
+    #header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    #token_input {
+        font-size: 1.5rem;
+        background-color: #4c4d4d;
+        color: #cacaca;
+        padding: 0.2rem 0.5rem;
+        outline: none;
+    }
+
+    #check_token {
+        font-size: 1.2rem;
+        background-color: #4c4d4d;
+        color: #cacaca;
+        padding: 0.2rem 1.5rem;
+        cursor: pointer;
+    }
+
+    #check_token:hover {
+        background-color: #363636;
+    }
+
+    #token_result {
+        font-size: 1.1rem;
+    }
+</style>
+
+
+
+<body>
+    <div id="header">
+        <h1>Minecraft Headless Authentication</h1>
+        <p>Example usage</p>
+    </div>
+
+    <input type="text" id="token_input">
+
+    <button id="check_token">Check token</button>
+
+    <p id="token_result"></p>
+</body>
+
+<script>
+    let input = document.getElementById("token_input");
+    let button = document.getElementById("check_token");
+    let result = document.getElementById("token_result");
+
+    button.addEventListener("click", async () => {
+        result.innerHTML = "";
+
+        const res = await fetch(`${location.origin}/verify`, {
+            method: "POST",
+            body: input.value
+        });
+        if (res.status === 404) return alert("no user with this token found");
+        if (res.status !== 200) return alert(`failed to get token: ${await res.text()}`);
+
+        const { username, uuid } = await res.json();
+
+        result.innerHTML = `username: ${username}<br/> uuid: ${uuid}`;
+    });
+</script>
+
+</html>

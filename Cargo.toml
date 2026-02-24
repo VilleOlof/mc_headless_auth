@@ -1,7 +1,14 @@
 [package]
 name = "mc_headless_auth"
+description = "Headless Minecraft Server Authentication"
 version = "0.1.0"
 edition = "2024"
+authors = ["VilleOlof"]
+categories = ["authentication"]
+keywords = ["minecraft", "server", "authentication"]
+readme = "readme.md"
+license = "MIT"
+repository = "https://github.com/VilleOlof/mc_headless_auth"
 
 [dependencies]
 crossbeam = "0.8.4"
@@ -30,3 +37,6 @@ path = "src/lib.rs"
 [[bin]]
 name = "mcha_server"
 path = "src/main.rs"
+
+[workspace]
+members = ["examples/*"]
