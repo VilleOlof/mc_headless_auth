@@ -41,11 +41,11 @@ fn get_status(protocol: i32, config: StatusConfig) -> Result<String, ServerError
             name: concat!(MIN_SUPPORTED_VERSION, "+").to_string(),
             protocol,
         },
-        players: Players {
+        players: Some(Players {
             max: 0,
             online: 0,
             sample: Vec::default(),
-        },
+        }),
         description: if protocol < protocol_version::MIN_SUPPORTED_PROTOCOL {
             Some(Value::String(config.legacy_decription.unwrap_or_default()))
         } else {
@@ -55,7 +55,7 @@ fn get_status(protocol: i32, config: StatusConfig) -> Result<String, ServerError
         enforces_secure_chat: false,
     };
 
-    Ok(serde_json::to_string_pretty(&status)?)
+    Ok(serde_json::to_string(&status)?)
 }
 
 fn encode_favicon(favicon: Option<RgbaImage>) -> Result<Option<String>, ServerError> {
@@ -82,7 +82,8 @@ fn encode_favicon(favicon: Option<RgbaImage>) -> Result<Option<String>, ServerEr
 #[derive(Debug, Clone, Serialize)]
 struct StatusResponse {
     version: Version,
-    players: Players,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    players: Option<Players>,
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -102,8 +102,8 @@ pub mod storage {
             self.tokens
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .get(token)
-                .map(|s| s.data.clone())
+                .remove(token)
+                .map(|s| s.data)
         }
 
         fn start_storage_cleaner(tokens: StorageInternal, ttl: Duration) -> ! {

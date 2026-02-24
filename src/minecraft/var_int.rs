@@ -99,16 +99,19 @@ impl ReadPacketData for VarInt {
 }
 
 impl WritePacketData for VarInt {
-    fn write(mut self, data: &mut BytesMut) {
-        if self.0 == 0 {
-            data.put_u8(0);
-            return;
-        }
+    fn write(self, data: &mut BytesMut) {
+        let mut value = self.0 as u32;
 
-        while (self.0 & !Self::SEGMENT_BITS as i32) != 0 {
-            data.put_u8((self.0 & Self::SEGMENT_BITS as i32 | Self::CONTINUE_BIT as i32) as u8);
-            self.0 >>= 7;
+        loop {
+            if (value & !(Self::SEGMENT_BITS as u32)) == 0 {
+                data.put_u8(value as u8);
+                return;
+            } else {
+                data.put_u8(
+                    ((value & (Self::SEGMENT_BITS as u32)) | (Self::CONTINUE_BIT as u32)) as u8,
+                );
+                value >>= 7;
+            }
         }
-        data.put_u8(self.0 as u8);
     }
 }

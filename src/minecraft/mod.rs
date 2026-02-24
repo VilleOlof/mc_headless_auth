@@ -24,6 +24,7 @@ pub mod protocol_version {
 
 mod packets {
     use bytes::{BufMut, BytesMut};
+    use serde_json::json;
     use simdnbt::owned::NbtTag;
 
     use crate::minecraft::{
@@ -67,9 +68,15 @@ mod packets {
 
         data.extend_from_slice(&uuid);
         PacketString::new(username).write(&mut data);
-        // i have no clue on how to encode the properties
-        // no matter how i get a fail to decode error on the client
-        Array::<u8>::new(vec![]).write(&mut data);
+
+        VarInt(_properties.len() as i32).write(&mut data);
+        for prop in _properties {
+            PacketString::new(prop.name).write(&mut data);
+            PacketString::new(prop.value).write(&mut data);
+            prop.signature
+                .map(|s| PacketString::new(s))
+                .write(&mut data);
+        }
 
         Packet::new(0x02, data.into())
     }
@@ -98,5 +105,18 @@ mod packets {
         data.extend_from_slice(&msg);
 
         Packet::new(0x02, data.into())
+    }
+
+    pub fn disconnect_login(reason: &str) -> Packet {
+        let mut data = BytesMut::new();
+
+        let reason = json!({
+            "text": reason
+        });
+        let json = serde_json::to_string(&reason).unwrap();
+
+        PacketString::new(json).write(&mut data);
+
+        Packet::new(0x00, data.into())
     }
 }

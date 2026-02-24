@@ -30,9 +30,6 @@ pub struct Server {
 
 impl Drop for Server {
     fn drop(&mut self) {
-        // make sure the server isnt active at all after the server exits
-        // i dont exactly know what happens to the event threads from on_error or on_join when the server drops
-        // as they are on different threads, but they do return a joinhandle so the consumer could fix it
         let _ = self.shutdown();
     }
 }
@@ -75,6 +72,9 @@ impl Server {
 
     /// Returns a associated [`Player`] if the given token is a valid one.  
     ///
+    /// Note that a token can only be valid **once**.  
+    ///
+    /// If a valid token is used and returns a player, it is no longer valid after that.  
     /// ## Example
     /// ```no_run
     /// let server = Server::start(ServerConfig::default());
@@ -110,6 +110,9 @@ impl Server {
                     MessageData::ConnectionError(e) => {
                         handler(e.as_ref());
                     }
+                    MessageData::CloseServer => {
+                        break;
+                    }
                     _ => (),
                 }
             }
@@ -136,6 +139,9 @@ impl Server {
                 match &msg.data {
                     MessageData::OnJoin { player, token } => {
                         handler(player, token);
+                    }
+                    MessageData::CloseServer => {
+                        break;
                     }
                     _ => (),
                 }

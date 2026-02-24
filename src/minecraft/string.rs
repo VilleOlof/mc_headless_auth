@@ -27,7 +27,8 @@ impl ReadPacketData for PacketString {
 
 impl WritePacketData for PacketString {
     fn write(self, data: &mut bytes::BytesMut) {
-        VarInt(self.0.len() as i32).write(data);
-        data.extend_from_slice(&self.0.into_bytes());
+        let bytes = self.0.as_bytes();
+        VarInt(bytes.len() as i32).write(data);
+        data.extend_from_slice(&bytes);
     }
 }

@@ -21,7 +21,7 @@ fn main() {
     });
 
     let http_server = tiny_http::Server::http("0.0.0.0:8000").unwrap();
-    println!("> http: started web server on 'https://localhost:8000'");
+    println!("> http: started web server on 'http://localhost:8000'");
 
     for mut request in http_server.incoming_requests() {
         let mc = mc_server.clone();

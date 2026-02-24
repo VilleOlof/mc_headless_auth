@@ -101,7 +101,7 @@ pub fn authenticate(
     packets::login_success(
         uuid_to_bytes(profile.id, protocol_version),
         &profile.name,
-        vec![],
+        profile.properties.clone(),
     )
     .write_compressed_encrypted_stream(stream, &mut enc)?;
 

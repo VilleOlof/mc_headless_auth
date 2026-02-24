@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use simdnbt::owned::{NbtList, NbtTag};
 
 use crate::{
-    Player, ServerError,
+    Player, ServerError, StatusConfig,
     channel_message::{ChannelMessage, MessageData},
     message::MessageGenerator,
     minecraft::{
@@ -12,7 +12,7 @@ use crate::{
         handshake::Handshake,
         login_start::LoginStart,
         packet::{Packet, ReadPacketData},
-        packets,
+        packets, protocol_version,
         server::ConnectionState,
     },
     token::TokenGenerator,
@@ -22,7 +22,15 @@ pub fn advance<T: TokenGenerator, M: MessageGenerator>(
     stream: &mut TcpStream,
     state: ConnectionState<T, M>,
     handshake: Handshake,
+    status_config: StatusConfig,
 ) -> Result<(), ServerError> {
+    // if less than min supported protocol, kick as early as possible with legacy decription
+    if handshake.protocol_version.0 < protocol_version::MIN_SUPPORTED_PROTOCOL {
+        packets::disconnect_login(&status_config.legacy_decription.unwrap_or_default())
+            .write_stream(stream)?;
+        return Ok(());
+    }
+
     let mut packet = Packet::from_stream(stream, 0x00)?;
     let login_start = LoginStart::read(&mut packet.data)?;
 

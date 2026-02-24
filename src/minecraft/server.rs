@@ -33,6 +33,46 @@ pub struct ConnectionState<T: TokenGenerator, M: MessageGenerator> {
     pub message: M,
 }
 
+pub fn start(
+    config: ServerConfig,
+    broadcast: Broadcast,
+    client_comm: Receiver<ChannelMessage>,
+) -> () {
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", config.port)).unwrap();
+    listener.set_nonblocking(true).unwrap();
+
+    let (priv_key, pub_key) = gen_rsa_key();
+
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => {
+                accept_connection(stream, &config, &broadcast, (&priv_key, &pub_key));
+            }
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {}
+            Err(e) => panic!("{e:?}"),
+        }
+
+        match client_comm.try_recv() {
+            Ok(msg) => match msg.data {
+                MessageData::CloseServer => {
+                    break;
+                }
+                _ => {}
+            },
+            Err(TryRecvError::Disconnected) => {
+                break;
+            }
+            Err(TryRecvError::Empty) => {}
+        }
+
+        sleep(Duration::from_millis(10));
+    }
+
+    // at the end broadcast a close server, this server itself doesnt listen
+    // to the broadcast for this signal, but rather this closes all event listener threads
+    broadcast.send(ChannelMessage::new(MessageData::CloseServer));
+}
+
 fn accept_connection(
     mut stream: TcpStream,
     config: &ServerConfig,
@@ -73,10 +113,15 @@ fn accept_connection(
                         Intent::Status => {
                             intents::status::advance(&mut stream, state, handshake, status_config)?
                         }
-                        Intent::Login => intents::login::advance(&mut stream, state, handshake)?,
-                        Intent::Transfer => {
-                            intents::transfer::advance(&mut stream, state, handshake)?
+                        Intent::Login => {
+                            intents::login::advance(&mut stream, state, handshake, status_config)?
                         }
+                        Intent::Transfer => intents::transfer::advance(
+                            &mut stream,
+                            state,
+                            handshake,
+                            status_config,
+                        )?,
                         Intent::Unknown(intent) => {
                             return Err(ServerError::UnknownHandshakeIntent(intent));
                         }
@@ -100,40 +145,4 @@ fn accept_connection(
             )))),
         }
     });
-}
-
-pub fn start(
-    config: ServerConfig,
-    broadcast: Broadcast,
-    client_comm: Receiver<ChannelMessage>,
-) -> () {
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", config.port)).unwrap();
-    listener.set_nonblocking(true).unwrap();
-
-    let (priv_key, pub_key) = gen_rsa_key();
-
-    loop {
-        match listener.accept() {
-            Ok((stream, _)) => {
-                accept_connection(stream, &config, &broadcast, (&priv_key, &pub_key));
-            }
-            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {}
-            Err(e) => panic!("{e:?}"),
-        }
-
-        match client_comm.try_recv() {
-            Ok(msg) => match msg.data {
-                MessageData::CloseServer => {
-                    break;
-                }
-                _ => {}
-            },
-            Err(TryRecvError::Disconnected) => {
-                break;
-            }
-            Err(TryRecvError::Empty) => {}
-        }
-
-        sleep(Duration::from_millis(10));
-    }
 }
